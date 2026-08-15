@@ -91,24 +91,24 @@
   <input type="range" id="fontSize" min="60" max="500" step="10" value="320">
 
   <div class="group-title">生长参数</div>
-  <div class="param-label"><span>生长速度</span><span class="param-value" id="growSpeedVal">3</span></div>
-  <input type="range" id="growSpeed" min="1" max="10" step="1" value="3">
-  <div class="param-label"><span>枝条步长</span><span class="param-value" id="stepLenVal">6</span></div>
-  <input type="range" id="stepLen" min="3" max="12" step="1" value="6">
+  <div class="param-label"><span>生长速度</span><span class="param-value" id="growSpeedVal">1</span></div>
+  <input type="range" id="growSpeed" min="0.25" max="3" step="0.25" value="1">
+  <div class="param-label"><span>枝条步长</span><span class="param-value" id="stepLenVal">3</span></div>
+  <input type="range" id="stepLen" min="1" max="6" step="1" value="3">
   <div class="param-label"><span>感知距离</span><span class="param-value" id="perceptionVal">28</span></div>
   <input type="range" id="perception" min="14" max="60" step="2" value="28">
   <div class="param-label"><span>养分密度</span><span class="param-value" id="densityVal">6</span></div>
   <input type="range" id="density" min="3" max="12" step="1" value="6">
   <div class="param-label"><span>随机性</span><span class="param-value" id="randomnessVal">0.18</span></div>
   <input type="range" id="randomness" min="0" max="1" step="0.05" value="0.18">
-  <div class="param-label"><span>主干粗细</span><span class="param-value" id="trunkWidthVal">9</span></div>
-  <input type="range" id="trunkWidth" min="3" max="20" step="1" value="9">
+  <div class="param-label"><span>主干粗细</span><span class="param-value" id="trunkWidthVal">2</span></div>
+  <input type="range" id="trunkWidth" min="1" max="8" step="1" value="2">
 
   <div class="group-title">叶与花</div>
-  <div class="param-label"><span>叶子大小</span><span class="param-value" id="leafSizeVal">5</span></div>
-  <input type="range" id="leafSize" min="0" max="12" step="1" value="5">
-  <div class="param-label"><span>叶子密度</span><span class="param-value" id="leafDensityVal">0.45</span></div>
-  <input type="range" id="leafDensity" min="0" max="1" step="0.05" value="0.45">
+  <div class="param-label"><span>叶子大小</span><span class="param-value" id="leafSizeVal">3</span></div>
+  <input type="range" id="leafSize" min="0" max="12" step="1" value="3">
+  <div class="param-label"><span>叶子密度</span><span class="param-value" id="leafDensityVal">0.65</span></div>
+  <input type="range" id="leafDensity" min="0" max="1" step="0.05" value="0.65">
   <div class="switch-row"><span>开花</span><div class="toggle-switch on" id="bloomToggle"></div></div>
 
   <div class="param-label" style="margin-top:8px"><span>风力</span><span class="param-value" id="windVal">0.6</span></div>
@@ -132,7 +132,7 @@
   <div class="group-title">操作</div>
   <button class="preset-btn" id="resetBtn" style="margin-top:0">重新生长</button>
   <button class="save-btn" id="saveBtn">保存 PNG</button>
-  <div class="hint">藤蔓沿文字轮廓生长；鼠标划过催生新枝，点击在原地催生一丛</div>
+  <div class="hint">藤蔓沿文字轮廓生长；点击画布在原地催生一丛新藤</div>
 </div>
 
 <div class="bottom-links" id="bottomLinks">
@@ -154,14 +154,14 @@ const cfg = {
   text: 'laohei',
   fontName: 'sans-serif',
   fontSize: 320,
-  growSpeed: 3,
-  stepLen: 6,
+  growSpeed: 1,
+  stepLen: 3,
   perception: 28,
   density: 6,
   randomness: 0.18,
-  trunkWidth: 9,
-  leafSize: 5,
-  leafDensity: 0.45,
+  trunkWidth: 2,
+  leafSize: 3,
+  leafDensity: 0.65,
   bloom: true,
   wind: 0.6,
   colBranch: [90, 70, 50],
@@ -183,7 +183,7 @@ let GW = 0, GH = 0, gridArr = null;  // 节点空间哈希（数字索引二维�
 const CELL = 32;
 let maxDepth = 1, frame = 0, doneGrowing = false;
 let textTop = 0, textBottom = -1;
-let lastMX = -1, lastMY = -1;
+let growAcc = 0;
 
 function hexToRgb(h) {
   return [parseInt(h.substr(1,2),16), parseInt(h.substr(3,2),16), parseInt(h.substr(5,2),16)];
@@ -249,6 +249,7 @@ function plantSeed() {
   gridReset();
   maxDepth = 1;
   doneGrowing = false;
+  growAcc = 0;
   // 多根种子：横向分布在文字下缘附近，各管一段字母
   let n = Math.max(2, Math.min(6, Math.round(viewMaxW() / 300)));
   let spread = viewMaxW() * 0.55;
@@ -392,9 +393,10 @@ function seedCluster(cx, cy, count, radius) {
 
 function draw() {
   frame++;
-  // 生长
+  // 生长（速度可小于 1：累加器支持小数步长）
   if (!doneGrowing) {
-    for (let k = 0; k < cfg.growSpeed; k++) growStep();
+    growAcc += cfg.growSpeed;
+    while (growAcc >= 1) { growStep(); growAcc -= 1; }
   }
   // 背景
   ctx.fillStyle = 'rgb(' + cfg.colBg[0] + ',' + cfg.colBg[1] + ',' + cfg.colBg[2] + ')';
@@ -601,15 +603,6 @@ function bindUI() {
   window.addEventListener('pointermove', e => {
     dot.style.left = e.clientX + 'px';
     dot.style.top = e.clientY + 'px';
-    // 划过画布 = 催生新枝
-    if (lastMX >= 0) {
-      let sp = Math.hypot(e.clientX - lastMX, e.clientY - lastMY);
-      if (sp > 14) {
-        seedCluster(e.clientX, e.clientY, 5, 26);
-        doneGrowing = false;
-      }
-    }
-    lastMX = e.clientX; lastMY = e.clientY;
   });
   [document.querySelector('.control-panel'), $('bottomLinks'), $('panelToggle')].forEach(el => {
     if (!el) return;
